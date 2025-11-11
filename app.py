@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 # Flask config
 BASE_DIR = Path(__file__).parent
 UPLOAD_FOLDER = str(BASE_DIR / 'uploads')
-ALLOWED_EXTENSIONS = {'mp4'}
+ALLOWED_EXTENSIONS = {'mp4', 'pdf'}
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100 MB
 
 USERS = {'admin': 'admin', 'user': 'user'}  # replace with secure storage for production
@@ -28,7 +28,10 @@ class Main:
         os.makedirs(self.upload_dir, exist_ok=True)
 
     def get_uploaded_files(self):
-        return [f for f in os.listdir(self.upload_dir) if f.endswith('.mp4')]
+        return [f for f in os.listdir(self.upload_dir) if f.lower().endswith('.mp4')]
+
+    def get_uploaded_pdfs(self):
+        return [f for f in os.listdir(self.upload_dir) if f.lower().endswith('.pdf')]
 
     def delete_file(self, file_name):
         file_path = os.path.join(self.upload_dir, file_name)
@@ -46,7 +49,8 @@ def index():
     if 'username' not in session:
         return redirect(url_for('login'))
     uploaded_files = main.get_uploaded_files()
-    return render_template('index.html', files=uploaded_files, username=session.get('username'))
+    uploaded_pdfs = main.get_uploaded_pdfs()
+    return render_template('index.html', files=uploaded_files, pdfs=uploaded_pdfs, username=session.get('username'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -85,22 +89,27 @@ def upload():
         return redirect(url_for('index'))
 
     if file and allowed_file(file.filename):
-        uploaded_files = main.get_uploaded_files()
-        if len(uploaded_files) >= main.max_files:
-            flash(f'Erro: limite de {main.max_files} vídeos atingido.', 'danger')
-            return redirect(url_for('index'))
-
         filename = secure_filename(file.filename)
         dest = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         if os.path.exists(dest):
             flash('Erro: arquivo já existe.', 'warning')
             return redirect(url_for('index'))
 
-        file.save(dest)
-        flash('Arquivo enviado com sucesso.', 'success')
+        # Se for vídeo, respeitar limite de vídeos
+        if filename.lower().endswith('.mp4'):
+            uploaded_videos = main.get_uploaded_files()
+            if len(uploaded_videos) >= main.max_files:
+                flash(f'Erro: limite de {main.max_files} vídeos atingido.', 'danger')
+                return redirect(url_for('index'))
+
+        try:
+            file.save(dest)
+            flash('Arquivo enviado com sucesso.', 'success')
+        except Exception as e:
+            flash(f'Erro ao salvar arquivo: {e}', 'danger')
         return redirect(url_for('index'))
     else:
-        flash('Erro: apenas arquivos .mp4 são permitidos.', 'danger')
+        flash('Erro: apenas arquivos .mp4 e .pdf são permitidos.', 'danger')
         return redirect(url_for('index'))
 
 
